@@ -1,0 +1,16 @@
+
+load_mode 1
+texture_mip 0
+model_lod 0
+speed 5
+screen_scale 1
+zfar 200
+
+load_name test1
+#load_name d1_trainstation_01
+
+startpos 0 0 0
+startrot 0 0 0
+
+#load_mode 0
+#load_name models/props_combine/combine_barricade_tall03a.mdl

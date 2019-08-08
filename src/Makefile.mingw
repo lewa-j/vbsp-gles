@@ -1,0 +1,55 @@
+
+ENGINE_DIR = ../../nenuzhno-engine_iter1
+LIBS_DIR = ../../../../Libs
+
+TARGET = ../assets/vbsp-renderer.exe
+
+all: $(TARGET)
+
+INCLUDES = -I. -I$(LIBS_DIR)/gl/glew-2.0.0/include -I$(LIBS_DIR)/gl/glfw-3.3.bin.WIN32/include -I$(LIBS_DIR)/gl/glm/glm -I$(ENGINE_DIR)/src
+CPPFLAGS = -Wall -ggdb -m32
+LDFLAGS = -static-libgcc -static-libstdc++ -m32
+LIBS = -lpthread -lnenuzhno-engine -lglfw3 -lglew32 -lopengl32 -lgdi32 -L$(ENGINE_DIR)/bin -L$(LIBS_DIR)/gl/glfw-3.3.bin.WIN32/lib-mingw-w64  -L$(LIBS_DIR)/gl/glew-2.0.0/lib
+SRCS = vbsp.cpp input.cpp bsp_loader.cpp mdl_loader.cpp vmt_loader.cpp parser.cpp \
+	renderer/mdl_renderer.cpp renderer/bsp_renderer.cpp renderer/progs_manager.cpp renderer/material.cpp renderer/render_list.cpp bsp_cull.cpp
+
+INCLUDES+= -I$(LIBS_DIR)/bullet3-2.86.1/src
+SRCS += physics.cpp bsp_physics.cpp
+#LIBS+= -lBulletDynamics -lBulletCollision -lLinearMath
+LIBS+= -lBullet -L$(LIBS_DIR)/bullet3-2.86.1/lib
+
+OBJS = $(patsubst %.cpp,obj/%.o,$(SRCS))
+
+obj/%.o: %.cpp
+	$(CXX) -c $< -o $@ $(CPPFLAGS) $(INCLUDES)
+
+$(TARGET): $(OBJS) $(ENGINE_DIR)/bin/libnenuzhno-engine.a
+	$(CXX) -o $@ $(OBJS) $(LDFLAGS) $(LIBS)
+
+clean:
+	del $(subst /,\,$(OBJS))
+
+rebuild: clean all
+
+#vbsp.cpp: glslProg.h texture.h  mesh.h file_format/bsp.h file_format/mdl.h
+#glslProg.cpp: glslProg.h
+mdl_loader.cpp: file_format/mdl.h renderer/material.h
+#vtf_loader.cpp: file_format/vtf.h texture.h
+#bsp_loader.cpp: file_format/bsp.h texture.h mesh.h
+#texture.cpp: texture.h
+mdl_renderer.cpp: file_format/mdl.h renderer/material.h
+#bsp_renderer.cpp: mesh.h file_format/bsp.h glslProg.h texture.h
+
+#obj/bsp_cull.o: world.h
+#obj/bsp_loader.o: world.h renderer/material.h
+#obj/renderer/bsp_renderer.o: world.h renderer/progs_manager.h
+#obj/vbsp.o: world.h renderer/progs_manager.h renderer/material.h
+#obj/renderer/progs_manager.o: renderer/progs_manager.h
+#obj/renderer/render_list.o: renderer/progs_manager.h
+#obj/renderer/material.cpp: renderer/material.h
+#obj/vmt_loader.o: renderer/material.h
+
+renderer/material.h: renderer/progs_manager.h
+renderer/render_list.h: renderer/material.h
+world.h: renderer/material.h
+

@@ -1,0 +1,59 @@
+line: allocation
+size 
+location
+
+75: glm::vec3 *vertices = new glm::vec3[numVerts];
+numVerts*12
+map->mapmesh->verts
+
+83: bsptexinfo_t *texInfos = new bsptexinfo_t[numTexInfos];
+numTexInfos*72
+map->texInfos
+
+103: bspface_t *faces = new bspface_t[numFaces];
+numFaces*56
+map->faces
+
+111: ColorRGBExp32 *samples = new ColorRGBExp32[numLightmapSamples];
+numLightmapSamples*4
+delete[] samples;
+
+119: bspedge_t *edges = new bspedge_t[numEdges];
+numEdges*4
+map->edges
+
+127: int *surfedges = new int[numSurfedges];
+numSurfedges*4
+map->surfedges
+
+135: bspmodel_t *models = new bspmodel_t[numModels];
+numModels*48
+map->models
+
+155: map->mapmesh = new Mesh((float*)vertices, numVerts, GL_POINTS);
+28
+map->mapmesh
+
+159: submesh_t *faceSubmeshes = new submesh_t[models[0].numfaces];
+models[0].numfaces*8
+map->model->submeshes
+
+160: map->model = new Mesh();
+28
+map->model
+
+163: map->lightmaps = new GLint[models[0].numfaces];
+models[0].numfaces*4
+map->lightmaps
+
+174: map->model->verts = new float[map->model->numVerts*7];
+map->model->numVerts*28
+map->model->verts
+
+175: map->model->inds = new GLuint[map->model->numInds];
+map->model->numInds*4
+map->model->inds
+
+177: lightmap_buffer = new GLubyte[BLOCK_SIZE*BLOCK_SIZE*3];
+1024*1024*3 = 3Mb
+delete[] lightmap_buffer;

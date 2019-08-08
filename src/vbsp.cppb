@@ -1,0 +1,476 @@
+#ifdef WIN32
+	#define GL_GLEXT_PROTOTYPES
+	#include <GL/glew.h>
+	//#define GLFW_INCLUDE_NONE
+	#define GLFW_INCLUDE_ES2
+	#include <GLFW/glfw3.h>
+	#define LOG(...) ((void)printf( __VA_ARGS__))
+#else
+	#include <android/log.h>
+	#define LOG(...) ((void)__android_log_print(ANDROID_LOG_ERROR, "gles-test", __VA_ARGS__))
+#endif
+#include <GLES2/gl2.h>
+
+//#include <glm/glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
+//#include <iostream>
+#include <fstream>
+//#include <cstring>
+//#include <cstdlib>
+
+#include "mesh.h"
+#include "renderer/material.h"
+#include "glslProg.h"
+#include "file_format/bsp.h"
+#include "file_format/mdl.h"
+
+//#define DRAW_TEST 1
+
+using namespace std;
+
+GLuint scrWidth = 800;
+GLuint scrHeight = 480;
+
+char map_name[256] = "test1";
+char model_name[256] = "turret";
+
+glslProg colorProg;
+glslProg lightmapProg;
+glslProg modelProg;
+GLuint u_color;
+GLuint u_modelMtx;
+
+map_t map;
+model_t model;
+
+GLuint defaultTex = 0;
+#ifdef DRAW_TEST
+GLuint testTex = 0;
+#endif
+
+glm::vec3 cameraPos(0,0,0);
+glm::vec3 cameraRot(0,0,0);
+glm::vec3 velocity(0.0f);
+glm::vec3 lastRot(0.0f);
+
+glm::mat4 projMtx;
+glm::mat4 viewMtx;
+glm::mat4 modelMtx;
+glm::mat4 mapMtx;
+glm::mat4 mvpMtx;
+
+int movemask = 0;
+float speed = 0.1f;
+float modelrot = 0;
+float angularSpeed = 0.5f;
+
+int load_map = false;
+int modelmiplevel = 0;
+
+void Draw();
+
+void Created()
+{
+#ifdef WIN32
+	ifstream cfg("vbsp.txt");
+#else
+	ifstream cfg("sdcard/test/vbsp.txt");
+#endif
+	cfg>>load_map;
+	cfg >> modelmiplevel;
+	cfg >> angularSpeed;
+	cfg >> speed;
+	if(load_map)
+		cfg>>map_name;
+	else
+		cfg>>model_name;
+	cfg>>cameraPos.x;
+	cfg>>cameraPos.y;
+	cfg>>cameraPos.z;
+	cfg>>cameraRot.x;
+	cfg>>cameraRot.y;
+	cfg>>cameraRot.z;
+	cfg.close();
+	lastRot = cameraRot;
+
+#ifdef WIN32
+	LOG( "glfw %s\n", glfwGetVersionString());
+#endif
+	LOG( "%s\n", glGetString(GL_VENDOR));
+	LOG( "%s\n", glGetString(GL_RENDERER));
+	LOG( "%s\n", glGetString(GL_VERSION));
+/*
+	float val[]={0,0};
+	glGetFloatv(GL_ALIASED_POINT_SIZE_RANGE,val);
+	LOG( "Point size %f %f\n",val[0],val[1]);
+	int sb=-1;
+	glGetIntegerv(GL_STENCIL_BITS, &sb);
+	LOG( "Stencil bits %d\n", sb);
+*/
+	glPixelStorei(GL_UNPACK_ALIGNMENT,1);
+
+	//shaders
+	colorProg.CreateFromFile("world", "color");
+	colorProg.u_mvpMtx = colorProg.GetUniformLoc("u_mvpMtx");
+	u_color = colorProg.GetUniformLoc("u_color");
+
+	lightmapProg.CreateFromFile("lightmap","lightmap");
+	lightmapProg.u_mvpMtx = lightmapProg.GetUniformLoc("u_mvpMtx");
+	int lmtex = lightmapProg.GetUniformLoc("u_lmtex");
+	lightmapProg.Use();
+	glUniform1i(lmtex,1);
+	
+	modelProg.CreateFromFile("model","model");
+	modelProg.u_mvpMtx = modelProg.GetUniformLoc("u_mvpMtx");
+	u_modelMtx = modelProg.GetUniformLoc("u_modelMtx");
+
+	//texture
+	GLubyte pixels[]={
+		127,127,190,190,127,127,190,190,
+		127,127,190,190,127,127,190,190,
+		190,190,127,127,190,190,127,127,
+		190,190,127,127,190,190,127,127,
+		127,127,190,190,127,127,190,190,
+		127,127,190,190,127,127,190,190,
+		190,190,127,127,190,190,127,127,
+		190,190,127,127,190,190,127,127};
+	defaultTex = CreateTexture(GL_LINEAR, GL_REPEAT);
+	glTexImage2D(GL_TEXTURE_2D,0,GL_LUMINANCE,8,8,0,GL_LUMINANCE,GL_UNSIGNED_BYTE,pixels);
+
+	loadedMaterials[numLoadedMaterials].texid = defaultTex;
+	loadedMaterials[numLoadedMaterials].transparent = false;
+	loadedMaterials[numLoadedMaterials].name = NULL;//new char[strlen(filename)+1];
+	//strcpy(loadedMaterials[numLoadedMaterials].name,filename);
+	numLoadedMaterials++;
+
+#ifdef DRAW_TEST
+	testTex = LoadVMT("apc01blue");
+#endif
+
+
+	if(load_map)
+	{
+		if(!LoadMap(map_name, &map))
+		{
+			LOG( "Error loading map\n");
+		}
+	}
+	else
+	{
+		if(!LoadModel(model_name, &model))
+		{
+			LOG( "Error loading model\n");
+		}
+	}
+
+	mapMtx = glm::scale( glm::rotate( glm::mat4(1),glm::radians(90.0f), glm::vec3(-1.0f, 0, 0)),glm::vec3(0.026f));
+	//moved to Update()
+	//modelMtx = glm::scale(glm::rotate(glm::mat4(1),model.rootbonerot.x, glm::vec3(-1.0f, 0, 0)),glm::vec3(0.026f));
+	
+	glBindTexture(GL_TEXTURE_2D,0);
+	glBindFramebuffer(GL_FRAMEBUFFER,0);
+	glClearColor(0.25,0.25,0.25,1);
+	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_CULL_FACE);
+}
+
+void Changed(int width, int height)
+{
+	if(width<=0 || height<=0)
+		return;
+	scrWidth = width;
+	scrHeight = height;
+	LOG("Changed %dx%d\n",width,height);
+	glViewport(0,0,width,height);
+
+	projMtx = glm::perspective(70.0f,(float)scrWidth/scrHeight,0.01f,500.0f);
+}
+
+#ifndef WIN32
+float starttx;
+float startty;
+int move = false;
+float cameraSpeed = 40;
+void Input(float tx, float ty, int ta)
+{
+	float x = tx/480;
+	float y = ty/800;
+	//LOG("touch action %d at %fx%f\n",ta,x,y);
+	if(ta==0)
+	{
+		starttx = x;
+		startty = y;
+		if(x<0.5f&&y>0.5f)
+			move = true;
+	}
+	else if(ta==1)
+	{
+		if(!move)
+		{
+			lastRot.x-=(startty-y)*cameraSpeed;
+			lastRot.y+=(starttx-x)*cameraSpeed;
+		}
+		velocity = glm::vec3(0);
+		move = false;
+	}
+	else if(ta==2)
+	{
+		if(move)
+		{
+			velocity.x = -(starttx-x);
+			velocity.z = -(startty-y);
+		}
+		else
+		{
+			cameraRot.x = lastRot.x-(startty-y)*cameraSpeed;
+			cameraRot.y = lastRot.y+(starttx-x)*cameraSpeed;
+		}
+	}
+}
+#endif
+
+void Update()
+{
+#ifdef WIN32
+	if(movemask & 1)
+		cameraPos.z-=speed;
+	else if(movemask & 2)
+		cameraPos.z+=speed;
+
+	if(movemask & 4)
+		cameraPos.x-=speed;
+	else if(movemask & 8)
+		cameraPos.x+=speed;
+
+	if(movemask & 16)
+		cameraPos.y+=speed;
+	else if(movemask & 32)
+		cameraPos.y-=speed;
+
+	if(movemask & 64)
+		cameraRot.x+=2.0f;
+	else if(movemask & 128)
+		cameraRot.x-=2.0f;
+
+	if(movemask & 256)
+		cameraRot.y+=2.0f;
+	else if(movemask & 512)
+		cameraRot.y-=2.0f;
+#endif
+
+	viewMtx = glm::mat4(1.0f);
+	viewMtx = glm::rotate( viewMtx, glm::radians(cameraRot.x), glm::vec3(-1.0f, 0.0f, 0.0f));
+	viewMtx = glm::rotate( viewMtx, glm::radians(cameraRot.y), glm::vec3(0.0f, 1.0f, 0.0f));
+	
+	cameraPos += glm::mat3(glm::inverse(viewMtx))*velocity*speed;
+	
+	viewMtx = glm::translate( viewMtx, -cameraPos);
+	//vMtx = glm::rotate( vMtx, glm::radians(90.0f), glm::vec3(-1.0f, 0.0f, 0.0f));
+	
+	modelrot += angularSpeed;
+	modelMtx = glm::rotate(glm::mat4(1),glm::radians(modelrot),glm::vec3(0, 1.0f, 0));
+	modelMtx = glm::rotate( modelMtx, model.rootbonerot.x, glm::vec3(-1.0f, 0, 0));
+	modelMtx = glm::rotate( modelMtx, model.rootbonerot.z, glm::vec3(0, 0, 1.0));
+	modelMtx = glm::scale( modelMtx, glm::vec3(0.026f));
+}
+
+/*void DrawMesh(mesh_t m)
+{
+	glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,12,m.verts);
+	//glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,32,m.verts);
+	//glVertexAttribPointer(1,3,GL_FLOAT,GL_FALSE,32,&(m.verts[3]));
+	//glVertexAttribPointer(2,2,GL_FLOAT,GL_FALSE,32,&(m.verts[6]));
+	glDrawArrays(GL_POINTS,0,m.numVerts);
+	//glDrawElements(GL_TRIANGLES,m.numInds,GL_UNSIGNED_INT,m.inds);
+	glDrawElements(GL_LINES,m.numInds,GL_UNSIGNED_INT,m.inds);
+}*/
+
+float colors[]={ 1,1,1, 1,0,0, 0,1,0, 0,0,1, 1,0,1, 0,1,1, 1,1,0};
+
+//DrawModel()
+
+
+void DrawMapFace(map_t m, int i,bool transparent)
+{
+	if(m.faceMeshes[i].numVerts == 0)
+		return;
+
+	cacheMat mat;
+	if(m.texdata[m.texInfos[m.faces[i].texinfo].texdata].nameStringTableID!=-1)
+	{
+		mat = loadedMaterials[m.texdata[m.texInfos[m.faces[i].texinfo].texdata].nameStringTableID];
+	}
+	else
+		mat = loadedMaterials[0];
+	if(mat.texid == -1)
+		return;
+	if(mat.transparent != transparent)
+		return;
+	if(mat.transparent)
+	{
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
+		glDepthMask(0);
+	}
+
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D,m.lightmaps[i]);
+	glActiveTexture(GL_TEXTURE0);
+	if(mat.texid)
+		glBindTexture(GL_TEXTURE_2D, mat.texid);
+	else
+		glBindTexture(GL_TEXTURE_2D, defaultTex);
+	//glUniform4f(u_color,i*37%256/255.0f,(i*87+50)%256/255.0f,(i*9+120)%256/255.0f,1);
+	glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,28,m.faceMeshes[i].verts);
+	glVertexAttribPointer(2,2,GL_FLOAT,GL_FALSE,28,&m.faceMeshes[i].verts[3]);
+	glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,28,&m.faceMeshes[i].verts[5]);
+	glDrawArrays(GL_TRIANGLE_FAN,0,m.faceMeshes[i].numVerts);
+
+	/*if(m.texInfos[m.faces[i].texinfo].texdata==1)
+	{
+		glDisable(GL_DEPTH_TEST);
+		colorProg.Use();
+		glDrawArrays(GL_LINE_STRIP,0,m.faceMeshes[i].numVerts);
+		lightmapProg.Use();
+		glEnable(GL_DEPTH_TEST);
+	}*/
+
+	if(mat.transparent)
+	{
+		glDisable(GL_BLEND);
+		glDepthMask(1);
+	}
+}
+
+void DrawMap(map_t m)
+{
+	glCullFace(GL_FRONT);
+	glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,12,m.model->verts);
+	//glVertexAttribPointer(1,3,GL_FLOAT,GL_FALSE,32,&(m.model->verts[3]));
+	//glVertexAttribPointer(2,2,GL_FLOAT,GL_FALSE,32,&(m.model->verts[6]));
+	glUniform4f(u_color,1.0f,1.0f,1.0f,1.0f);
+	glDrawArrays(GL_POINTS,0,m.model->numVerts);
+
+	/*int indices[32];
+	int v=0;
+	int fv=0;
+	int se = 0;
+	for(int i=0; i< m.numFaces;i++)
+	{
+		v=0;
+		if(m.faces[i].numedges>0)
+		{
+			se = m.surfedges[m.faces[i].firstedge];
+			fv = m.edges[(int)abs(se)].v[se>0];
+		}
+		for(int j=0; j < m.faces[i].numedges-2; j++)
+		{
+
+			indices[v++] = fv;
+			se = m.surfedges[m.faces[i].firstedge+j+2];
+			indices[v++] = m.edges[(int)abs(se)].v[se>0];
+			se = m.surfedges[m.faces[i].firstedge+j+1];
+			indices[v++] = m.edges[(int)abs(se)].v[se>0];
+		}
+		glDrawElements(GL_TRIANGLES,v,GL_UNSIGNED_INT,indices);
+	}*/
+	glEnableVertexAttribArray(2);
+	glEnableVertexAttribArray(1);
+	lightmapProg.Use();
+	for(int i=0; i<m.models[0].numfaces; i++)
+	{
+		DrawMapFace(m,i,false);
+	}
+	for(int i=0; i<m.models[0].numfaces; i++)
+	{
+		DrawMapFace(m,i,true);
+	}
+	glDisableVertexAttribArray(2);
+	glDisableVertexAttribArray(1);
+	glCullFace(GL_BACK);
+}
+#ifdef DRAW_TEST
+void DrawTest()
+{
+	//glEnableVertexAttribArray(1);
+	glEnableVertexAttribArray(2);
+	modelProg.Use();
+	GLfloat tempvert[]={-20,0,0,0,0, 20,0,0,1,0, -20,0,40,0,1, 20,0,40,1,1};
+	glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,20,tempvert);
+	glVertexAttribPointer(2,2,GL_FLOAT,GL_FALSE,20,tempvert+3);
+	glBindTexture(GL_TEXTURE_2D,testTex);
+	//glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
+
+	glDrawArrays(GL_TRIANGLE_STRIP,0,4);
+	
+	glDisable(GL_BLEND);
+	//glDisableVertexAttribArray(1);
+	glDisableVertexAttribArray(2);
+}
+#endif
+void Draw()
+{
+	Update();
+
+	glEnableVertexAttribArray(0);
+	//glEnableVertexAttribArray(1);
+
+	//glBindFramebuffer(GL_FRAMEBUFFER,0);
+	glViewport(0,0,scrWidth,scrHeight);
+	glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);//|GL_STENCIL_BUFFER_BIT);
+
+	//glDisableVertexAttribArray(0);
+	//glDisableVertexAttribArray(1);
+	glDisableVertexAttribArray(2);
+
+	//
+	//glEnableVertexAttribArray(0);
+	lightmapProg.Use();
+	mvpMtx = projMtx*viewMtx*mapMtx;
+	glUniformMatrix4fv(lightmapProg.u_mvpMtx, 1, false, glm::value_ptr(mvpMtx));
+	modelProg.Use();
+	glUniformMatrix4fv(modelProg.u_mvpMtx, 1, false, glm::value_ptr(mvpMtx));
+	colorProg.Use();
+	glUniformMatrix4fv(colorProg.u_mvpMtx, 1, false, glm::value_ptr(mvpMtx));
+#ifdef DRAW_TEST
+	DrawTest();
+#endif
+#ifdef WIN32
+	glEnable(GL_VERTEX_PROGRAM_POINT_SIZE);
+#endif
+	if(load_map)
+		DrawMap(map);
+	else
+	{
+		mvpMtx = projMtx*viewMtx*modelMtx;
+		modelProg.Use();
+		glUniformMatrix4fv(modelProg.u_mvpMtx, 1, false, glm::value_ptr(mvpMtx));
+		glUniformMatrix4fv(u_modelMtx, 1, false, glm::value_ptr(modelMtx));
+		colorProg.Use();
+		glUniformMatrix4fv(colorProg.u_mvpMtx, 1, false, glm::value_ptr(mvpMtx));
+		glUniform4f(u_color,1.0f,1.0f,1.0f,1.0f);
+		DrawModel(&model);
+	}
+#ifdef WIN32
+	glDisable(GL_VERTEX_PROGRAM_POINT_SIZE);
+#endif
+	glDisableVertexAttribArray(0);
+	//
+
+	/*glDisable(GL_DEPTH_TEST);
+	glUseProgram(program2DId);
+	//glBindBuffer(GL_ARRAY_BUFFER,0);
+	glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,16,&verts2D);
+	glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,16,&verts2D[2]);
+
+	//glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D,fbo1TexId);
+	glDrawArrays(GL_TRIANGLE_FAN,0,4);
+	glBindTexture(GL_TEXTURE_2D,0);
+	glEnable(GL_DEPTH_TEST);*/
+
+	glUseProgram(0);
+}

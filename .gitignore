@@ -1,0 +1,21 @@
+# Binaries
+*.o
+*.so
+*.a
+*.exe
+*.dll
+
+# Qt Creator
+*.user*
+*.config
+*.creator
+*.includes
+*.files
+
+bin
+obj
+obj_lin
+
+*.mdl
+*.vtx
+*.vvd

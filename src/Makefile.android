@@ -1,0 +1,33 @@
+TARGET = libgles-test.so
+
+all: $(TARGET)
+
+INCLUDES = -I../../libs/glm
+CPPFLAGS = -Wall
+OBJS1 = android-backend.o gles-test.o glslProg.o texture.o bsp_loader.o mdl_loader.o vtf_loader.o mdl_renderer.o bsp_renderer.o
+OBJS = $(patsubst %.o,obj/%.o,$(OBJS1))
+LDFLAGS = -Wl,-soname,$(TARGET) -shared -Wl,--no-undefined -Wl,-z,noexecstack
+LIBS = -llog -lGLESv2 -lgnustl_static -lm
+
+obj/%.o: %.cpp
+	g++ -c $< -o $@ $(CPPFLAGS) $(INCLUDES)
+
+$(TARGET): $(OBJS)
+	$(CC) -o $@ $^ $(LDFLAGS) $(LIBS)
+	mv $(TARGET) ../NDKGlesTest1/libs/armeabi/
+	su -с "cp ../NDKGlesTest1/libs/armeabi/$(TARGET) /data/data/ru.lewa_j.ndkglestest1/lib/$(TARGET)"
+	su -c "chmod 777 /data/data/ru.lewa_j.ndkglestest1/lib/$(TARGET)"
+
+clean:
+	$(RM) $(OBJS)
+
+rebuild: clean all
+
+gles_renderer.cpp: glslProg.h texture.h  mesh.h file_format/bsp.h file_format/mdl.h
+glslProg.cpp: glslProg.h
+mdl_loader.cpp: file_format/mdl.h texture.h
+vtf_loader.cpp: file_format/vtf.h texture.h
+bsp_loader.cpp: file_format/bsp.h texture.h mesh.h
+texture.cpp: texture.h
+mdl_renderer.cpp: file_format/mdl.h glslProg.h texture.h
+bsp_renderer.cpp: mesh.h file_format/bsp.h glslProg.h texture.h

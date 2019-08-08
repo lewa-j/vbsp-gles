@@ -1,0 +1,87 @@
+* - base done
+transparent objects and faces sort
+bsp
+	pakfile lump (zip)
+	transparent
+	world lights
+	brush models
+	collision (bullet) *
+		displacements
+		props
+	water
+	sky
+	optimize displacements
+	cubemaps
+	decals/overlays
+culling
+	batch *
+	node/leaf *
+	displacements
+	face
+	portals/areas
+props
+	static(game lump) *
+		optimize rendering
+		skin
+		light
+			(ambient *)
+	dynamic(ents)
+	physics(newton,bullet?)
+entities
+	light
+	sound
+	logic
+	3d skybox
+vmt
+	$selfillum
+	detail
+	remember missing materials
+	$normalmapalphaenvmapmask
+	$basealphaenvmapmask
+	unlittwotexture
+	vtf mipmaps from file
+	vtf tex formats 32, 40, 43, 34, 52, 53 (bug)
+console
+	text rendering +
+	log file +
+	cvars
+	rewrite config
+fog
+sky
+mouselook +
+
+NOTE:
+world render list
+	shader
+		material
+			submesh
+ents
+	shader
+		material
+			vbo
+				inst
+old:
+	models
+		inst
+			mesh
+				material
+				
+
+
+// ------------------------------------------------------------------------------------
+// UNITS:
+// ------------------------------------------------------------------------------------
+// NOTE:  Coordinates are in HL units.  1 unit == 1 inch.  X is east (forward), Y is north (left), Z is up (up)
+// QAngle are pitch (around y), Yaw (around Z), Roll (around X)
+// AngularImpulse are exponetial maps (an axis in HL units scaled by a "twist" angle in degrees)
+//		They can be transformed like normals/covectors and added linearly
+// mass is kg, volume is in^3, acceleration is in/s^2, velocity is in/s
+
+// density is kg/m^3 (water ~= 998 at room temperature)
+// preferably, these would be in kg/in^3, but the range of those numbers makes them not very human readable
+// having water be about 1000 is really convenient for data entry.
+// Since volume is in in^3 and density is in kg/m^3: 
+//	density = (mass / volume) * CUBIC_METERS_PER_CUBIC_INCH
+// Force is applied using impulses (kg*in/s)
+// Torque is applied using impulses (kg*degrees/s)
+
