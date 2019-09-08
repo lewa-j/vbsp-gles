@@ -1,6 +1,6 @@
 # vbsp-gles
 
-![Screenshot](res/Screenshot.png)
+![Screenshot](res/screenshot.png)
 
 Loads and renders vbsp maps (source engine). Works on Windows and Android.
 
