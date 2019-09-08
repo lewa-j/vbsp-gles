@@ -1,6 +1,6 @@
 
 ENGINE_DIR = ../../nenuzhno-engine_iter1
-LIBS_DIR = ../../../../Libs
+LIBS_DIR = ../../../../libs
 
 TARGET = ../assets/vbsp-renderer.exe
 

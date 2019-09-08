@@ -19,3 +19,7 @@ obj_lin
 *.mdl
 *.vtx
 *.vvd
+
+**/log.txt
+**/fslog.txt
+*.ent

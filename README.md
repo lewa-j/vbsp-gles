@@ -1,5 +1,7 @@
 # vbsp-gles
 
+![Screenshot](res/Screenshot.png)
+
 Loads and renders vbsp maps (source engine). Works on Windows and Android.
 
 Uses first iteration of [nenuzhno-engine](https://github.com/lewa-j/nenuzhno-engine_iter1) and [bullet3-2.86.1](https://github.com/bulletphysics/bullet3/releases/tag/2.86.1).
